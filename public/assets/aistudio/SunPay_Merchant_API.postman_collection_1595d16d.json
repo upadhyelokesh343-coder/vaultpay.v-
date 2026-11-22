@@ -1,0 +1,671 @@
+{
+  "info": {
+    "_postman_id": "c8f3e2d1-5a4b-4c3d-8e9f-merchantgateway2026",
+    "name": "SilkPay Merchant Gateway API - Complete Suite",
+    "description": "Comprehensive, 100% verified Postman collection for Merchants integrating with our Payment Gateway Aggregator Engine.\n\n### Authentication\nAll requests (except public auth) require your Merchant API Bearer Token in the `Authorization` header:\n`Authorization: Bearer {{apiToken}}`\n\n### Dynamic Variable Chaining\n- When you run `Create Payin Order`, the test script automatically captures `lastMerchantOrderNo` and `lastGatewayOrderNo` into collection variables.\n- Subsequent requests like `Check Payin Status` and `Submit UTR` automatically chain off the generated order number.\n\n### Automatic Callback Recovery\n- If an upstream webhook callback was missed or delayed by network issues, calling `Check Payin Status` automatically queries the upstream banking network live, settles your wallet ledger, and returns the real-time status immediately.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4009",
+      "type": "string"
+    },
+    {
+      "key": "apiToken",
+      "value": "gw_your_api_token_here",
+      "type": "string"
+    },
+    {
+      "key": "lastMerchantOrderNo",
+      "value": "ORD-177000123",
+      "type": "string"
+    },
+    {
+      "key": "lastGatewayOrderNo",
+      "value": "MPAYIN-20260804112000-A1B2",
+      "type": "string"
+    },
+    {
+      "key": "lastPayoutOrderNo",
+      "value": "WD-177000456",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Payin (Collections)",
+      "description": "Endpoints to create payment cashier links, check transaction status, submit customer UTRs, and query order history.",
+      "item": [
+        {
+          "name": "Create Payin Order",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const uniqueOrderNo = 'ORD-' + Date.now();",
+                  "pm.collectionVariables.set('lastMerchantOrderNo', uniqueOrderNo);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Order created successfully with cashierUrl', function () {",
+                  "    pm.expect(json.code).to.eql(0);",
+                  "    pm.expect(json.data).to.have.property('cashierUrl');",
+                  "});",
+                  "if (json.data && json.data.gatewayOrderNo) {",
+                  "    pm.collectionVariables.set('lastGatewayOrderNo', json.data.gatewayOrderNo);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"{{lastMerchantOrderNo}}\",\n  \"amount\": \"500.00\",\n  \"currency\": \"INR\",\n  \"payinName\": \"John Doe\",\n  \"payinPhone\": \"9876543210\",\n  \"payinEmail\": \"john@example.com\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payin-webhook\",\n  \"returnUrl\": \"https://yourdomain.com/payment-success\",\n  \"mark\": \"Order purchase test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "create"]
+            },
+            "description": "Generates a branded cashier payment URL. Direct your customer to `cashierUrl` to complete their UPI / QR payment."
+          },
+          "response": [
+            {
+              "name": "200 OK Example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"merchantOrderNo\": \"ORD-177000123\",\n  \"amount\": \"500.00\",\n  \"currency\": \"INR\",\n  \"payinName\": \"John Doe\",\n  \"payinPhone\": \"9876543210\",\n  \"payinEmail\": \"john@example.com\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payin-webhook\",\n  \"returnUrl\": \"https://yourdomain.com/payment-success\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/merchant/api/payin/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["merchant", "api", "payin", "create"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"data\": {\n    \"merchantOrderNo\": \"ORD-177000123\",\n    \"gatewayOrderNo\": \"MPAYIN-20260804112000-A1B2\",\n    \"cashierUrl\": \"http://localhost:4009/pay/MPAYIN-20260804112000-A1B2\",\n    \"amount\": 500,\n    \"payinState\": 1,\n    \"createdAt\": \"2026-08-04T11:20:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check Payin Status (POST Query)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns order status with isPaid flag', function () {",
+                  "    pm.expect(json.code).to.eql(0);",
+                  "    pm.expect(json.data).to.have.property('isPaid');",
+                  "    pm.expect(json.data).to.have.property('status');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNo\": \"{{lastMerchantOrderNo}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "query"]
+            },
+            "description": "Check whether an order has been paid. Supports passing either your `merchantOrderNo` or the gateway `gatewayOrderNo`. If the upstream callback was missed or delayed, this endpoint automatically checks the upstream banking network, updates the database, settles your wallet ledger, and returns the real-time status."
+          },
+          "response": [
+            {
+              "name": "200 OK Example (Status: Paid)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderNo\": \"ORD-177000123\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/merchant/api/payin/query",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["merchant", "api", "payin", "query"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"data\": {\n    \"isPaid\": true,\n    \"status\": \"PAID\",\n    \"payinState\": 2,\n    \"payinStateName\": \"Success\",\n    \"orderNo\": \"ORD-177000123\",\n    \"merchantOrderNo\": \"ORD-177000123\",\n    \"gatewayOrderNo\": \"MPAYIN-20260910120000-A1B2\",\n    \"amount\": \"500.00\",\n    \"actualAmount\": \"500.00\",\n    \"feeCharged\": \"20.00\",\n    \"settleAmount\": \"480.00\",\n    \"currency\": \"INR\",\n    \"utr\": \"428712345678\",\n    \"cashierUrl\": \"http://localhost:4009/pay/MPAYIN-20260910120000-A1B2\",\n    \"createdAt\": \"2026-09-10T11:20:00.000Z\",\n    \"paidAt\": \"2026-09-10T11:21:45.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check Payin Status (GET URL Param)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/status/{{lastMerchantOrderNo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "status", "{{lastMerchantOrderNo}}"]
+            },
+            "description": "RESTful GET endpoint to check transaction status using order number in URL path."
+          },
+          "response": []
+        },
+        {
+          "name": "Check Payin Status (GET Query Param)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/query?orderNo={{lastMerchantOrderNo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "query"],
+              "query": [
+                {
+                  "key": "orderNo",
+                  "value": "{{lastMerchantOrderNo}}"
+                }
+              ]
+            },
+            "description": "GET endpoint to check transaction status using `?orderNo=` query string."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit UTR for Confirmation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"{{lastMerchantOrderNo}}\",\n  \"utr\": \"428712345678\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/utr/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "utr", "submit"]
+            },
+            "description": "Manually submit a 12-digit bank UTR reference number for an order to accelerate bank reconciliation."
+          },
+          "response": []
+        },
+        {
+          "name": "List Payin Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/list?limit=20&offset=0&state=all",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "list"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "state",
+                  "value": "all",
+                  "description": "all | 1 (processing) | 2 (success) | 4 (timeout)"
+                }
+              ]
+            },
+            "description": "Retrieve paginated list of payin transactions with optional status and date filters."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payin Summary Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payin/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payin", "summary"]
+            },
+            "description": "Returns lifetime and daily volume, success count, total fee charged, and settled amounts."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Payout (Withdrawals)",
+      "description": "Endpoints to create IMPS / Bank Account payouts (V2) or UPI VPA payouts (V3) and query withdrawal status.",
+      "item": [
+        {
+          "name": "Create Bank Payout (V2)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const uniquePayoutNo = 'WD-' + Date.now();",
+                  "pm.collectionVariables.set('lastPayoutOrderNo', uniquePayoutNo);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"{{lastPayoutOrderNo}}\",\n  \"version\": \"V2\",\n  \"amount\": \"1000.00\",\n  \"cashName\": \"Jane Smith\",\n  \"cashPhone\": \"9876543210\",\n  \"cashNumber\": \"50100012345678\",\n  \"ifsc\": \"HDFC0001234\",\n  \"bankName\": \"HDFC Bank\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payout-webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payout/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payout", "create"]
+            },
+            "description": "Submit a bank transfer payout request (IMPS / NEFT). The requested amount plus applicable fees are balance-locked atomically."
+          },
+          "response": [
+            {
+              "name": "200 OK Example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"merchantOrderNo\": \"WD-177000456\",\n  \"version\": \"V2\",\n  \"amount\": \"1000.00\",\n  \"cashName\": \"Jane Smith\",\n  \"cashPhone\": \"9876543210\",\n  \"ifsc\": \"HDFC0001234\",\n  \"bankName\": \"HDFC Bank\",\n  \"cashNumber\": \"50100012345678\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payout-webhook\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/merchant/api/payout/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["merchant", "api", "payout", "create"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": 0,\n  \"msg\": \"payout request created successfully\",\n  \"data\": {\n    \"merchantOrderNo\": \"WD-177000456\",\n    \"gatewayOrderNo\": \"MPAYOUT-20260804112500-C3D4\",\n    \"amount\": 1000,\n    \"feeCharged\": 48,\n    \"settleAmount\": 952,\n    \"cashState\": 1,\n    \"createdAt\": \"2026-08-04T11:25:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create UPI Payout (V3)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const uniqueUpiNo = 'UPI-WD-' + Date.now();",
+                  "pm.collectionVariables.set('lastPayoutOrderNo', uniqueUpiNo);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"{{lastPayoutOrderNo}}\",\n  \"version\": \"V3\",\n  \"amount\": \"500.00\",\n  \"cashName\": \"Jane Smith\",\n  \"cashPhone\": \"9876543210\",\n  \"cashNumber\": \"user@okaxis\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payout-webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payout/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payout", "create"]
+            },
+            "description": "Submit a direct UPI payout request (V3). `cashNumber` must be the beneficiary's valid UPI ID / VPA."
+          },
+          "response": [
+            {
+              "name": "200 OK Example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"merchantOrderNo\": \"UPI-WD-001\",\n  \"version\": \"V3\",\n  \"amount\": \"500.00\",\n  \"cashNumber\": \"user@okaxis\",\n  \"cashName\": \"Jane Smith\",\n  \"cashPhone\": \"9876543210\",\n  \"notifyUrl\": \"https://yourdomain.com/api/payout-webhook\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/merchant/api/payout/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["merchant", "api", "payout", "create"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"data\": {\n    \"merchantOrderNo\": \"UPI-WD-001\",\n    \"gatewayOrderNo\": \"MPAYOUT-20260827113000-U9V1\",\n    \"amount\": \"500.00\",\n    \"feeCharged\": \"21.00\",\n    \"totalDeducted\": \"521.00\",\n    \"cashState\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check Payout Status (POST Query)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNo\": \"{{lastPayoutOrderNo}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payout/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payout", "query"]
+            },
+            "description": "Query payout withdrawal status using `merchantOrderNo` or `gatewayOrderNo`."
+          },
+          "response": []
+        },
+        {
+          "name": "Check Payout Status (GET URL Param)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payout/status/{{lastPayoutOrderNo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payout", "status", "{{lastPayoutOrderNo}}"]
+            },
+            "description": "RESTful GET endpoint to query payout status."
+          },
+          "response": []
+        },
+        {
+          "name": "List Payout Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/payout/list?limit=20&offset=0&state=all",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "payout", "list"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "state",
+                  "value": "all",
+                  "description": "all | 0 (pending) | 4 (success) | 5 (failed)"
+                }
+              ]
+            },
+            "description": "Retrieve paginated list of payout / withdrawal orders."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Balance & Account",
+      "description": "Endpoints to check real-time wallet balances, merchant profile, active fee rates, and financial ledger audit entries.",
+      "item": [
+        {
+          "name": "Get Merchant Balance & Wallet",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "balance"]
+            },
+            "description": "Returns available balance, pending locked balance, total payin volume, total payout volume, and total fee paid."
+          },
+          "response": [
+            {
+              "name": "200 OK Example",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/merchant/api/balance",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["merchant", "api", "balance"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"data\": {\n    \"merchantId\": \"MCH-20260001\",\n    \"availableBalance\": 48500.00,\n    \"pendingBalance\": 1200.00,\n    \"totalPayinVolume\": 150000.00,\n    \"totalPayoutVolume\": 95000.00,\n    \"totalFeeCollected\": 6500.00\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Account Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/account",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "account"]
+            },
+            "description": "Returns merchant profile, active fee rates, notification webhooks, and IP whitelist configurations."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Merchant Profile & Rates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "auth", "me"]
+            },
+            "description": "Returns authenticated merchant context, active rates, and account status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Financial Ledger Entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/merchant/api/ledger?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["merchant", "api", "ledger"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Retrieve double-entry balance ledger movements (credits, debits, fee deductions) with before & after balances."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Webhooks (Callbacks Reference)",
+      "description": "Examples of incoming asynchronous HTTP POST callbacks sent by our gateway to your configured `notifyUrl`.",
+      "item": [
+        {
+          "name": "Payin Webhook Callback Example",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"ORD-177000123\",\n  \"gatewayOrderNo\": \"MPAYIN-20260804112000-A1B2\",\n  \"amount\": \"500.00\",\n  \"actualAmount\": \"500.00\",\n  \"feeCharged\": \"30.00\",\n  \"settleAmount\": \"470.00\",\n  \"payinState\": 2,\n  \"utr\": \"421509123456\",\n  \"sign\": \"9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhook/sample-payin-receiver",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhook", "sample-payin-receiver"]
+            },
+            "description": "Reference representation of the incoming signed JSON payload sent to your `notifyUrl` upon payment completion. Your server must respond with `SUCCESS` (HTTP 200)."
+          },
+          "response": []
+        },
+        {
+          "name": "Payout Webhook Callback Example",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantOrderNo\": \"WD-177000456\",\n  \"gatewayOrderNo\": \"MPAYOUT-20260804112500-C3D4\",\n  \"amount\": \"1000.00\",\n  \"feeCharged\": \"48.00\",\n  \"cashState\": 4,\n  \"utr\": \"421509987654\",\n  \"sign\": \"8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhook/sample-payout-receiver",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhook", "sample-payout-receiver"]
+            },
+            "description": "Reference representation of the incoming signed JSON payload sent to your `notifyUrl` upon payout transfer success (`cashState: 4`) or failure (`cashState: 3`)."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
