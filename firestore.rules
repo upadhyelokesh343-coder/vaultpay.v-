@@ -1,0 +1,592 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Hardened Primitives
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email_verified == true &&
+         request.auth.token.email == 'rajsjarma8@gmail.com')
+      );
+    }
+
+    function isValidId(id) {
+      return id is string &&
+        id.size() >= 1 &&
+        id.size() <= 128 &&
+        id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints (No existing() or diff() inside helpers)
+    // -------------------------------------------------------------------------
+    function isValidWalletAccount(data) {
+      return data.keys().hasAll([
+        'uid',
+        'username',
+        'userId',
+        'referralCode',
+        'walletBalance',
+        'totalPaid',
+        'totalWithdrawal',
+        'totalCashbackEarned',
+        'completedOrdersCount',
+        'referralBonusEarned',
+        'referralMilestonesPaid',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'username',
+        'userId',
+        'referralCode',
+        'referredBy',
+        'walletBalance',
+        'totalPaid',
+        'totalWithdrawal',
+        'totalCashbackEarned',
+        'completedOrdersCount',
+        'referralBonusEarned',
+        'referralMilestonesPaid',
+        'streakDays',
+        'dailyCheckInDate',
+        'linkedAppId',
+        'linkedAppName',
+        'linkedAt',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      (data.uid == request.auth.uid || isAdmin()) &&
+      data.username is string && data.username.size() >= 1 && data.username.size() <= 64 &&
+      data.userId is string && data.userId.size() >= 4 && data.userId.size() <= 24 &&
+      data.userId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.referralCode is string && data.referralCode.size() >= 6 && data.referralCode.size() <= 32 &&
+      data.referralCode.matches('^[A-Z0-9_\\-]+$') &&
+      (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() <= 32)) &&
+      data.walletBalance is number && data.walletBalance >= 0 &&
+      data.totalPaid is number && data.totalPaid >= 0 &&
+      data.totalWithdrawal is number && data.totalWithdrawal >= 0 &&
+      data.totalCashbackEarned is number && data.totalCashbackEarned >= 0 &&
+      data.completedOrdersCount is number && data.completedOrdersCount >= 0 &&
+      data.referralBonusEarned is number && data.referralBonusEarned >= 0 &&
+      data.referralMilestonesPaid is number && data.referralMilestonesPaid >= 0 &&
+      (!('streakDays' in data) || (data.streakDays is number && data.streakDays >= 0)) &&
+      (!('dailyCheckInDate' in data) || (data.dailyCheckInDate is string && data.dailyCheckInDate.size() <= 20)) &&
+      (!('linkedAppId' in data) || (data.linkedAppId is string && data.linkedAppId.size() <= 32)) &&
+      (!('linkedAppName' in data) || (data.linkedAppName is string && data.linkedAppName.size() <= 64)) &&
+      (!('linkedAt' in data) || (data.linkedAt is string && data.linkedAt.size() <= 40)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWalletPrivatePii(data) {
+      return data.keys().hasAll(['uid', 'updatedAt']) &&
+      data.keys().hasOnly([
+        'uid',
+        'mobileNumber',
+        'upiId',
+        'bankName',
+        'accountLast4',
+        'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      (data.uid == request.auth.uid || isAdmin()) &&
+      (!('mobileNumber' in data) || (data.mobileNumber is string && data.mobileNumber.size() <= 20)) &&
+      (!('upiId' in data) || (data.upiId is string && data.upiId.size() <= 100)) &&
+      (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 100)) &&
+      (!('accountLast4' in data) || (data.accountLast4 is string && data.accountLast4.size() <= 4)) &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWalletTransaction(data) {
+      return data.keys().hasAll([
+        'uid',
+        'type',
+        'title',
+        'subtitle',
+        'amount',
+        'status',
+        'timestamp',
+        'referenceId',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'orderId',
+        'type',
+        'title',
+        'titleZh',
+        'subtitle',
+        'subtitleZh',
+        'amount',
+        'paidAmount',
+        'commissionAmount',
+        'status',
+        'timestamp',
+        'referenceId',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.uid) &&
+      (data.uid == request.auth.uid || isAdmin()) &&
+      (!('orderId' in data) || (data.orderId is string && data.orderId.size() <= 128)) &&
+      data.type in ['order_payout', 'withdrawal', 'daily_bonus', 'referral_bonus'] &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+      (!('titleZh' in data) || (data.titleZh is string && data.titleZh.size() <= 120)) &&
+      data.subtitle is string && data.subtitle.size() >= 1 && data.subtitle.size() <= 200 &&
+      (!('subtitleZh' in data) || (data.subtitleZh is string && data.subtitleZh.size() <= 200)) &&
+      data.amount is number && data.amount >= 0 &&
+      (!('paidAmount' in data) || (data.paidAmount is number && data.paidAmount >= 0)) &&
+      (!('commissionAmount' in data) || (data.commissionAmount is number && data.commissionAmount >= 0)) &&
+      data.status in ['Success', 'Pending', 'Rejected', 'Closed'] &&
+      data.timestamp is string && data.timestamp.size() <= 40 &&
+      data.referenceId is string && data.referenceId.size() >= 1 && data.referenceId.size() <= 40 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWalletNotification(data) {
+      return data.keys().hasAll([
+        'uid',
+        'title',
+        'message',
+        'timestamp',
+        'read',
+        'kind',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'title',
+        'titleZh',
+        'message',
+        'messageZh',
+        'timestamp',
+        'read',
+        'kind',
+        'createdAt'
+      ]) &&
+      isValidId(data.uid) &&
+      (data.uid == request.auth.uid || isAdmin()) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+      (!('titleZh' in data) || (data.titleZh is string && data.titleZh.size() <= 140)) &&
+      data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+      (!('messageZh' in data) || (data.messageZh is string && data.messageZh.size() <= 300)) &&
+      data.timestamp is string && data.timestamp.size() <= 40 &&
+      data.read is bool &&
+      data.kind in ['payout', 'withdrawal', 'system'] &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidAdminOrder(data) {
+      return data.keys().hasAll([
+        'orderCode',
+        'amount',
+        'paymentLink',
+        'commissionRate',
+        'isActive',
+        'createdBy',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'orderCode',
+        'amount',
+        'paymentLink',
+        'commissionRate',
+        'isActive',
+        'createdBy',
+        'createdAt'
+      ]) &&
+      data.orderCode is string && data.orderCode.size() >= 3 && data.orderCode.size() <= 32 &&
+      data.amount is number && data.amount >= 100 &&
+      data.paymentLink is string && data.paymentLink.size() >= 4 && data.paymentLink.size() <= 500 &&
+      data.commissionRate is number && data.commissionRate == 0.11 &&
+      data.isActive is bool &&
+      isValidId(data.createdBy) &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidOrderSubmission(data) {
+      return data.keys().hasAll([
+        'orderId',
+        'orderCode',
+        'userUid',
+        'userName',
+        'amount',
+        'paymentLink',
+        'utrRef',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'orderId',
+        'orderCode',
+        'userUid',
+        'userName',
+        'amount',
+        'paymentLink',
+        'utrRef',
+        'status',
+        'paidAt',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.orderId) &&
+      data.orderCode is string && data.orderCode.size() >= 3 && data.orderCode.size() <= 32 &&
+      isValidId(data.userUid) &&
+      (data.userUid == request.auth.uid || isAdmin()) &&
+      data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 64 &&
+      data.amount is number && data.amount >= 100 &&
+      data.paymentLink is string && data.paymentLink.size() >= 4 && data.paymentLink.size() <= 500 &&
+      data.utrRef is string && data.utrRef.size() >= 4 && data.utrRef.size() <= 64 &&
+      data.status in ['pending', 'success', 'rejected'] &&
+      (!('paidAt' in data) || (data.paidAt is string && data.paidAt.size() <= 40)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidReferralCodeLookup(data) {
+      return data.keys().hasAll(['ownerUid', 'code', 'createdAt']) &&
+      data.keys().hasOnly(['ownerUid', 'code', 'createdAt']) &&
+      isValidId(data.ownerUid) &&
+      (data.ownerUid == request.auth.uid || isAdmin()) &&
+      data.code is string && data.code.size() >= 6 && data.code.size() <= 32 &&
+      data.code.matches('^[A-Z0-9_\\-]+$') &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidReferralRecord(data) {
+      return data.keys().hasAll([
+        'referrerUid',
+        'referrerCode',
+        'inviteeUid',
+        'inviteeName',
+        'registeredAt',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'referrerUid',
+        'referrerCode',
+        'inviteeUid',
+        'inviteeName',
+        'registeredAt',
+        'completedAt',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      isValidId(data.referrerUid) &&
+      data.referrerCode is string && data.referrerCode.size() >= 6 && data.referrerCode.size() <= 32 &&
+      data.referrerCode.matches('^[A-Z0-9_\\-]+$') &&
+      isValidId(data.inviteeUid) &&
+      data.inviteeName is string && data.inviteeName.size() >= 1 && data.inviteeName.size() <= 64 &&
+      data.registeredAt is string && data.registeredAt.size() <= 40 &&
+      (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 40)) &&
+      data.status in ['registered', 'completed'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Match Blocks
+    // -------------------------------------------------------------------------
+
+    // Trusted Admin Role Registry
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isOwner(adminId);
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Primary Wallet Account
+    match /wallets/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidWalletAccount(incoming()) &&
+        isOwner(userId) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidWalletAccount(incoming()) &&
+        (isOwner(userId) || isAdmin()) &&
+        incoming().uid == existing().uid &&
+        incoming().userId == existing().userId &&
+        incoming().referralCode == existing().referralCode &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          // Action 1: Link or unlink UPI payment app
+          incoming().diff(existing()).affectedKeys().hasOnly(['linkedAppId', 'linkedAppName', 'linkedAt', 'updatedAt']) ||
+          // Action 2: Attach referral attribution once
+          (!('referredBy' in existing()) && incoming().diff(existing()).affectedKeys().hasOnly(['referredBy', 'updatedAt'])) ||
+          // Action 3: Daily check-in reward (+₹25 fixed)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'totalCashbackEarned', 'dailyCheckInDate', 'streakDays', 'updatedAt']) &&
+            incoming().walletBalance <= existing().walletBalance + 25.01 &&
+            incoming().totalCashbackEarned <= existing().totalCashbackEarned + 25.01 &&
+            incoming().streakDays <= existing().streakDays + 1
+          ) ||
+          // Action 4: Withdrawal deduction (cannot increase walletBalance)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'totalWithdrawal', 'updatedAt']) &&
+            incoming().walletBalance <= existing().walletBalance &&
+            incoming().totalWithdrawal >= existing().totalWithdrawal
+          ) ||
+          // Action 5: Referral milestone payout credit (₹100 per milestone)
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['referralBonusEarned', 'referralMilestonesPaid', 'walletBalance', 'totalCashbackEarned', 'updatedAt']) &&
+            incoming().referralMilestonesPaid >= existing().referralMilestonesPaid &&
+            (incoming().referralBonusEarned - existing().referralBonusEarned) <= ((incoming().referralMilestonesPaid - existing().referralMilestonesPaid) * 100 + 0.01) &&
+            (incoming().walletBalance - existing().walletBalance) <= ((incoming().referralMilestonesPaid - existing().referralMilestonesPaid) * 100 + 0.01) &&
+            (incoming().totalCashbackEarned - existing().totalCashbackEarned) <= ((incoming().referralMilestonesPaid - existing().referralMilestonesPaid) * 100 + 0.01)
+          ) ||
+          // Action 6: Update display username from account profile/registration
+          incoming().diff(existing()).affectedKeys().hasOnly(['username', 'updatedAt'])
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // Isolated Private PII Subcollection
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          isValidWalletPrivatePii(incoming()) &&
+          isOwner(userId) &&
+          incoming().uid == userId &&
+          incoming().updatedAt == request.time &&
+          existsAfter(/databases/$(database)/documents/wallets/$(userId));
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          isValidWalletPrivatePii(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time &&
+          (
+            isAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['mobileNumber', 'upiId', 'bankName', 'accountLast4', 'updatedAt'])
+          );
+
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(docId);
+      }
+
+      // Wallet Transactions Subcollection
+      match /transactions/{txId} {
+        allow get: if isValidId(userId) && isValidId(txId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(txId) &&
+          isValidWalletTransaction(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          existsAfter(/databases/$(database)/documents/wallets/$(userId));
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(txId) &&
+          isValidWalletTransaction(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            isAdmin() ||
+            (
+              existing().status == 'Pending' &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'title', 'titleZh', 'subtitle', 'subtitleZh', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(txId);
+      }
+
+      // Wallet Notifications Subcollection
+      match /notifications/{notifId} {
+        allow get: if isValidId(userId) && isValidId(notifId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(notifId) &&
+          isValidWalletNotification(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          existsAfter(/databases/$(database)/documents/wallets/$(userId));
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(notifId) &&
+          isValidWalletNotification(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          (
+            isAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+          );
+
+        allow delete: if isValidId(userId) && isValidId(notifId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // Admin-Published Active Payment Orders (non-PII)
+    match /admin_orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn();
+      allow list: if isSignedIn() && (resource.data.isActive == true || isAdmin());
+
+      allow create: if isAdmin() &&
+        isValidId(orderId) &&
+        isValidAdminOrder(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(orderId) &&
+        isValidAdminOrder(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'paymentLink', 'isActive']);
+
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // User Order Payment & UTR Submissions
+    match /order_submissions/{submissionId} {
+      allow get: if isValidId(submissionId) && isSignedIn() && (resource.data.userUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userUid == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(submissionId) &&
+        isValidOrderSubmission(incoming()) &&
+        incoming().userUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/admin_orders/$(incoming().orderId));
+
+      allow update: if isVerifiedUser() &&
+        isValidId(submissionId) &&
+        isValidOrderSubmission(incoming()) &&
+        incoming().userUid == existing().userUid &&
+        incoming().orderId == existing().orderId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().userUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status == 'pending' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['utrRef', 'paidAt', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(submissionId);
+    }
+
+    // Public Non-PII Referral Code Lookup
+    match /referral_codes/{code} {
+      allow get: if isValidId(code) && isSignedIn();
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(code) &&
+        isValidReferralCodeLookup(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().code == code &&
+        incoming().createdAt == request.time;
+
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(code);
+    }
+
+    // Referral Attribution & Completion Records
+    match /referrals/{referralId} {
+      allow get: if isValidId(referralId) && isSignedIn() && (
+        resource.data.referrerUid == request.auth.uid ||
+        resource.data.inviteeUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.referrerUid == request.auth.uid ||
+        resource.data.inviteeUid == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(referralId) &&
+        isValidReferralRecord(incoming()) &&
+        referralId == request.auth.uid &&
+        incoming().inviteeUid == request.auth.uid &&
+        incoming().referrerUid != request.auth.uid &&
+        incoming().status == 'registered' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/referral_codes/$(incoming().referrerCode)) &&
+        get(/databases/$(database)/documents/referral_codes/$(incoming().referrerCode)).data.ownerUid == incoming().referrerUid;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(referralId) &&
+        isValidReferralRecord(incoming()) &&
+        incoming().referrerUid == existing().referrerUid &&
+        incoming().referrerCode == existing().referrerCode &&
+        incoming().inviteeUid == existing().inviteeUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'completedAt', 'updatedAt']);
+
+      allow delete: if isAdmin() && isValidId(referralId);
+    }
+  }
+}

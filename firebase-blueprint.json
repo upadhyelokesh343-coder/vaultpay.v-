@@ -1,0 +1,195 @@
+{
+  "entities": {
+    "WalletAccount": {
+      "title": "WalletAccount",
+      "description": "Primary wallet balance, counters, and referral code state for an authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "userId": { "type": "string", "minLength": 4, "maxLength": 24, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referralCode": { "type": "string", "minLength": 6, "maxLength": 32, "pattern": "^[A-Z0-9_\\-]+$" },
+        "referredBy": { "type": "string", "maxLength": 32 },
+        "walletBalance": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "totalWithdrawal": { "type": "number" },
+        "totalCashbackEarned": { "type": "number" },
+        "completedOrdersCount": { "type": "number" },
+        "referralBonusEarned": { "type": "number" },
+        "referralMilestonesPaid": { "type": "number" },
+        "streakDays": { "type": "number" },
+        "dailyCheckInDate": { "type": "string", "maxLength": 20 },
+        "linkedAppId": { "type": "string", "maxLength": 32 },
+        "linkedAppName": { "type": "string", "maxLength": 64 },
+        "linkedAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "username",
+        "userId",
+        "referralCode",
+        "walletBalance",
+        "totalPaid",
+        "totalWithdrawal",
+        "totalCashbackEarned",
+        "completedOrdersCount",
+        "referralBonusEarned",
+        "referralMilestonesPaid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WalletPrivatePii": {
+      "title": "WalletPrivatePii",
+      "description": "Isolated private PII (phone number, UPI ID, bank metadata) accessible only to the owner or admin.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mobileNumber": { "type": "string", "maxLength": 20 },
+        "upiId": { "type": "string", "maxLength": 100 },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "accountLast4": { "type": "string", "maxLength": 4 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "updatedAt"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Immutable ledger entry for order payouts, referral milestones, daily rewards, and withdrawals.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["order_payout", "withdrawal", "daily_bonus", "referral_bonus"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "titleZh": { "type": "string", "maxLength": 120 },
+        "subtitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "subtitleZh": { "type": "string", "maxLength": 200 },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Success", "Pending", "Rejected", "Closed"] },
+        "timestamp": { "type": "string", "maxLength": 40 },
+        "referenceId": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "type", "title", "subtitle", "amount", "status", "timestamp", "referenceId", "createdAt", "updatedAt"]
+    },
+    "WalletNotification": {
+      "title": "WalletNotification",
+      "description": "User notification entry for order approvals, payouts, and system updates.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "titleZh": { "type": "string", "maxLength": 140 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "messageZh": { "type": "string", "maxLength": 300 },
+        "timestamp": { "type": "string", "maxLength": 40 },
+        "read": { "type": "boolean" },
+        "kind": { "type": "string", "enum": ["payout", "withdrawal", "system"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "title", "message", "timestamp", "read", "kind", "createdAt"]
+    },
+    "AdminOrder": {
+      "title": "AdminOrder",
+      "description": "Order template published by Admin with fixed 11% commission and payment link URL.",
+      "type": "object",
+      "properties": {
+        "orderCode": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "amount": { "type": "number" },
+        "paymentLink": { "type": "string", "minLength": 4, "maxLength": 500 },
+        "commissionRate": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderCode", "amount", "paymentLink", "commissionRate", "isActive", "createdBy", "createdAt"]
+    },
+    "OrderSubmission": {
+      "title": "OrderSubmission",
+      "description": "User payment submission with UTR awaiting Admin approval or rejection.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderCode": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "userUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "amount": { "type": "number" },
+        "paymentLink": { "type": "string", "minLength": 4, "maxLength": 500 },
+        "utrRef": { "type": "string", "minLength": 4, "maxLength": 64 },
+        "status": { "type": "string", "enum": ["pending", "success", "rejected"] },
+        "paidAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderCode", "userUid", "userName", "amount", "paymentLink", "utrRef", "status", "createdAt", "updatedAt"]
+    },
+    "ReferralCodeLookup": {
+      "title": "ReferralCodeLookup",
+      "description": "Public non-PII mapping of referral code to owner UID for link attribution.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "code": { "type": "string", "minLength": 6, "maxLength": 32, "pattern": "^[A-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "code", "createdAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Tracks a referred user from registration to completed order (5 completed = ₹100).",
+      "type": "object",
+      "properties": {
+        "referrerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerCode": { "type": "string", "minLength": 6, "maxLength": 32, "pattern": "^[A-Z0-9_\\-]+$" },
+        "inviteeUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "inviteeName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "registeredAt": { "type": "string", "maxLength": 40 },
+        "completedAt": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["registered", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referrerUid", "referrerCode", "inviteeUid", "inviteeName", "registeredAt", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/wallets/{userId}": {
+      "schema": { "$ref": "#/entities/WalletAccount" },
+      "description": "User wallet balances and referral counters, readable/writable only by owner or admin."
+    },
+    "/wallets/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/WalletPrivatePii" },
+      "description": "Private PII (mobile number, UPI ID, bank info) strictly isolated to owner or admin."
+    },
+    "/wallets/{userId}/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "User wallet transaction ledger subcollection."
+    },
+    "/wallets/{userId}/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/WalletNotification" },
+      "description": "User notifications subcollection."
+    },
+    "/admin_orders/{orderId}": {
+      "schema": { "$ref": "#/entities/AdminOrder" },
+      "description": "Admin-published payment orders with fixed 11% commission."
+    },
+    "/order_submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/OrderSubmission" },
+      "description": "User UTR payment submissions awaiting Admin approval or rejection."
+    },
+    "/referral_codes/{code}": {
+      "schema": { "$ref": "#/entities/ReferralCodeLookup" },
+      "description": "Non-PII mapping of referral code to referrer UID."
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Persistent referral attribution records keyed by invitee UID."
+    }
+  }
+}
